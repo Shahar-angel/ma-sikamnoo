@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Workflow
 
-Every new feature gets its own git branch (e.g. `feature/<short-name>`), created before any code for it is written; never develop a feature directly on the main branch. Note: the project is not yet a git repo — `git init` (with an initial commit on `main`) is required before the first feature branch.
+Every new feature gets its own git branch (e.g. `feature/<short-name>`), created before any code for it is written; never develop a feature directly on the main branch. Repo: https://github.com/Shahar-angel/ma-sikamnoo (public, default branch `main`). `.claude/settings.local.json` is gitignored.
 
 Always plan before executing: enter plan mode, present the plan, and only implement after it is approved. Planning is done with Opus 5.5 (`claude-opus-5-5`); execution is done with Sonnet 5.5 (`claude-sonnet-5-5`). The `opusplan` model setting (`/model opusplan`) applies this split automatically.
 
@@ -17,7 +17,7 @@ After every implementation, run all of the following and report the results (pas
 - **Edge cases** — e.g. empty input, text the AI doesn't recognize, removing all items, quantity 0/negative, rejected quote followed by additions, done work that differs from what was approved, Hebrew/special characters and HTML in input, page reload mid-flow (localStorage), invalid API key / network failure falling back to local parsing.
 - **Regression tests** — re-run the main E2E flow to confirm previously working features still work, not only the changed part.
 
-After any code is written, run a **security review** of the change: at minimum XSS (all user/AI text inserted into HTML must go through `esc()`), handling of the API key, and trusting AI output (items must still pass `validate()`). The project is not a git repo, so `/security-review` (which reviews a branch diff) won't work unless `git init` is run first — review the changed code directly instead.
+After any code is written, run a **security review** of the change: at minimum XSS (all user/AI text inserted into HTML must go through `esc()`), handling of the API key, and trusting AI output (items must still pass `validate()`). On a feature branch, `/security-review` reviews the branch's pending changes.
 
 ## Running
 
