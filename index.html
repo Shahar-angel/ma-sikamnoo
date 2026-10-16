@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>מה סיכמנו?</title>
+<style>
+:root{--bg:#f5f7fa;--card:#fff;--ink:#1d2433;--mute:#6b7385;--pri:#1565c0;--ok:#2e7d32;--bad:#c62828;--warn:#ef6c00;--line:#e2e6ee;--ai:#7e57c2}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:var(--pri);color:#fff;padding:14px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+header h1{margin:0;font-size:22px}header p{margin:2px 0 0;opacity:.85;font-size:13px}
+.roles button{border:1px solid #fff;background:transparent;color:#fff;padding:6px 12px;border-radius:16px;cursor:pointer;font:inherit}
+.roles button.on{background:#fff;color:var(--pri)}
+nav{display:flex;flex-wrap:wrap;gap:6px;padding:10px 16px;background:#fff;border-bottom:1px solid var(--line)}
+nav button{border:1px solid var(--line);background:#fff;padding:6px 10px;border-radius:16px;cursor:pointer;font-size:13px}
+nav button.on{background:var(--pri);color:#fff;border-color:var(--pri)}nav button.done::after{content:" ✓";color:var(--ok)}
+nav button.on.done::after{color:#fff}
+main{max-width:880px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}
+h2{margin-top:0;font-size:18px}h3{font-size:15px;margin:16px 0 6px}
+textarea,input[type=text],input[type=password],select{width:100%;padding:9px;font:inherit;border:1px solid var(--line);border-radius:8px}
+textarea{min-height:80px}
+.btn{background:var(--pri);color:#fff;border:0;padding:9px 16px;border-radius:8px;cursor:pointer;font:inherit;margin-top:8px}
+.btn.ok{background:var(--ok)}.btn.bad{background:var(--bad)}.btn.ghost{background:#fff;color:var(--pri);border:1px solid var(--pri)}
+.btn:disabled{opacity:.4;cursor:default}
+table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:6px;border-bottom:1px solid var(--line);text-align:right}
+.tag{display:inline-block;background:#ede7f6;color:var(--ai);padding:2px 8px;border-radius:10px;font-size:12px}
+.ai{border-right:4px solid var(--ai)}.mute{color:var(--mute);font-size:13px}.total{font-weight:700}
+.ok-t{color:var(--ok);font-weight:700}.bad-t{color:var(--bad);font-weight:700}.warn-t{color:var(--warn);font-weight:700}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media(max-width:600px){.grid{grid-template-columns:1fr}}
+label{font-size:13px;color:var(--mute);display:block;margin:8px 0 3px}
+input[type=number]{width:60px;padding:4px}
+.tl{border-right:2px solid var(--line);padding-right:12px}.tl div{margin-bottom:8px;font-size:14px}.tl b{color:var(--pri)}
+.cust{max-width:520px;margin:0 auto}.big{font-size:26px;font-weight:700}
+.loading{opacity:.6;pointer-events:none}
+</style>
+</head>
+<body>
+<header>
+ <div><h1>מה סיכמנו?</h1><p>POC – אינסטלטור · שפה טבעית ← מידע מובנה ← פעולה במערכת</p></div>
+ <div class="roles"><button id="r-pro" onclick="setRole('pro')">בעל מקצוע</button> <button id="r-cust" onclick="setRole('cust')">מזמין העבודה</button></div>
+</header>
+<nav id="nav"></nav>
+<main id="app"></main>
+<script>
+/* ===== מחירון קבוע – המחיר נקבע כאן בלבד, לא ע"י ה-AI ===== */
+const PRICES={
+ visit:{name:"ביקור ואבחון",price:150,kw:[],parts:[]},
+ siphon:{name:"החלפת סיפון",price:250,kw:["סיפון"],parts:["סיפון"]},
+ tap:{name:"החלפת ברז ניל",price:180,kw:["ברז ניל","ניל"],parts:["ברז ניל"]},
+ faucet:{name:"החלפת ברז כיור/מטבח",price:350,kw:["ברז מטבח","ברז כיור","ברז"],parts:["ברז פרח"]},
+ clog:{name:"פתיחת סתימה",price:300,kw:["סתימה","סתום","נסתם"],parts:[]},
+ leak:{name:"איתור ותיקון נזילה",price:400,kw:["נזילה","נוזל","דליפה","מטפטף"],parts:["אטמים"]},
+ flex:{name:"החלפת צינור גמיש",price:120,kw:["גמיש","צינורית"],parts:["צינור גמיש"]},
+ toilet:{name:"תיקון מיכל הדחה",price:280,kw:["הדחה","אסלה","מיכל"],parts:["מנגנון הדחה"]},
+ boiler:{name:"תיקון דוד",price:450,kw:["דוד","בוילר"],parts:["גוף חימום"]}
+};
+const total=items=>items.reduce((s,i)=>s+(PRICES[i.id]?.price||0)*i.qty,0);
+const now=()=>new Date().toLocaleString("he-IL");
+const clone=o=>JSON.parse(JSON.stringify(o));
+
+/* ===== שכבת ה-AI: שפה טבעית → מידע מובנה ===== */
+async function aiParse(text,context){
+ const key=S.apiKey;
+ if(key){
+  try{return validate(await callClaude(key,text,context),text,"Claude")}
+  catch(e){alert("קריאה ל-Claude נכשלה, עובר לניתוח מקומי: "+e.message)}
+ }
+ return validate(mockParse(text),text,"ניתוח מקומי (דמו)");
+}
+async function callClaude(key,text,context){
+ const list=Object.entries(PRICES).map(([id,p])=>`${id}: ${p.name}`).join("\n");
+ const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{
+  "content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+  body:JSON.stringify({model:"claude-haiku-5-5",max_tokens:600,
+   system:`אתה שכבת הבנה במערכת לאינסטלטורים. הפוך טקסט חופשי בעברית למידע מובנה. אל תקבע מחירים. השתמש רק במזהי עבודות מהרשימה:\n${list}\nהחזר JSON בלבד בפורמט: {"problem":"","work":"","parts":[""],"actions":[""],"items":[{"id":"","qty":1}]}`,
+   messages:[{role:"user",content:`הקשר: ${context}\nטקסט: ${text}`}]})});
+ if(!r.ok) throw new Error("HTTP "+r.status);
+ const d=await r.json();const t=d.content.map(c=>c.text||"").join("");
+ return JSON.parse(t.slice(t.indexOf("{"),t.lastIndexOf("}")+1));
+}
+function mockParse(t){
+ const items=[];
+ for(const [id,p] of Object.entries(PRICES)) if(p.kw.some(k=>t.includes(k))) items.push({id,qty:1});
+ if(items.some(i=>i.id==="tap")) items.splice(items.findIndex(i=>i.id==="faucet")>-1?items.findIndex(i=>i.id==="faucet"):items.length,1);
+ if(items.some(i=>i.id==="siphon")&&/סדוק|להחליף|החלפ|הוחלף/.test(t)){const l=items.findIndex(i=>i.id==="leak");if(l>-1)items.splice(l,1)}
+ const loc=(t.match(/(מתחת ל|ב)(כיור|מטבח|אמבטיה|מקלחת|שירותים)/)||[])[0];
+ const problem=/סדוק|שבור/.test(t)?"רכיב סדוק/שבור":/נזיל|דליפ|מטפטף/.test(t)?"נזילה":/סתימ|סתום/.test(t)?"סתימה":"לא זוהתה בעיה ברורה";
+ return{problem:problem+(loc?" "+loc:""),work:items.map(i=>PRICES[i.id].name).join(", "),
+  parts:[...new Set(items.flatMap(i=>PRICES[i.id].parts))],actions:items.map(i=>PRICES[i.id].name),items};
+}
+function validate(o,src,engine){
+ const items=(o.items||[]).filter(i=>PRICES[i.id]).map(i=>({id:i.id,qty:Math.max(1,+i.qty||1)}));
+ return{problem:o.problem||"",work:o.work||"",parts:o.parts||[],actions:o.actions||[],items,source:src,engine};
+}
+
+/* ===== מצב (נשמר בדפדפן) ===== */
+const EMPTY={role:"pro",step:0,apiKey:"",job:{customer:"",address:""},initial:null,diagnosis:null,quote:null,approval:null,pending:null,additions:[],done:null,closed:false,log:[]};
+let S;try{S=Object.assign(clone(EMPTY),JSON.parse(localStorage.getItem("mahSikamnu")||"{}"))}catch{S=clone(EMPTY)}
+function save(){try{localStorage.setItem("mahSikamnu",JSON.stringify(S))}catch{}}
+function log(who,what){S.log.push({at:now(),who,what})}
+function reset(){if(confirm("לפתוח עבודה חדשה? כל הנתונים יימחקו.")){const k=S.apiKey;S=clone(EMPTY);S.apiKey=k;save();render()}}
+
+const STEPS=[["פתיחת עבודה",()=>S.initial],["אבחון בשטח",()=>S.quote],["הצעת מחיר",()=>S.approval],["תוספות",()=>S.additions.length],["סיום עבודה",()=>S.closed],["מה סיכמנו?",()=>S.closed],["הגדרות",()=>S.apiKey]];
+function setRole(r){S.role=r;render()}
+function go(i){S.step=i;render()}
+
+/* ===== רכיבי תצוגה ===== */
+function itemsTable(items,edit){
+ if(!items?.length) return '<p class="mute">אין פריטים</p>';
+ return `<table><tr><th>עבודה (מחירון)</th><th>מחיר יח'</th><th>כמות</th><th>סה"כ</th>${edit?'<th></th>':''}</tr>`+
+ items.map((i,n)=>`<tr><td>${PRICES[i.id].name}</td><td>₪${PRICES[i.id].price}</td><td>${edit?`<input type=number min=1 value="${i.qty}" onchange="setQty('${edit}',${n},this.value)">`:i.qty}</td><td>₪${PRICES[i.id].price*i.qty}</td>${edit?`<td><button onclick="rmItem('${edit}',${n})" title="הסר">✕</button></td>`:''}</tr>`).join("")+
+ `<tr><td colspan=3 class="total">סה"כ</td><td class="total">₪${total(items)}</td>${edit?'<td></td>':''}</tr></table>`;
+}
+function structEditor(k){const o=S[k];return `<div class="card ai"><span class="tag">AI · ${o.engine}</span> <span class="mute">"${esc(o.source)}"</span>
+ <p class="mute">המידע המובנה שה-AI חילץ – ניתן לתקן לפני המשך (Human in the Loop)</p>
+ <div class="grid"><div><label>בעיה</label><input type=text value="${esc(o.problem)}" onchange="S.${k}.problem=this.value;save()"></div>
+ <div><label>עבודה</label><input type=text value="${esc(o.work)}" onchange="S.${k}.work=this.value;save()"></div>
+ <div><label>חלקים (מופרד בפסיקים)</label><input type=text value="${esc(o.parts.join(", "))}" onchange="S.${k}.parts=splitList(this.value);save()"></div>
+ <div><label>פעולות נדרשות (מופרד בפסיקים)</label><input type=text value="${esc(o.actions.join(", "))}" onchange="S.${k}.actions=splitList(this.value);save()"></div></div>
+ <h3>פריטי מחירון שזוהו</h3>${itemsTable(o.items,k)}
+ <div style="display:flex;gap:6px;margin-top:8px"><select id="add-${k}">${Object.entries(PRICES).map(([id,p])=>`<option value="${id}">${p.name} (₪${p.price})</option>`).join("")}</select><button onclick="addItem('${k}')" style="white-space:nowrap">+ הוסף</button></div></div>`}
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const splitList=v=>v.split(",").map(x=>x.trim()).filter(Boolean);
+function setQty(k,n,v){S[k].items[n].qty=Math.max(1,+v);render()}
+function rmItem(k,n){S[k].items.splice(n,1);render()}
+function addItem(k){S[k].items.push({id:document.getElementById("add-"+k).value,qty:1});render()}
+const val=id=>document.getElementById(id).value.trim();
+async function busy(fn){document.body.classList.add("loading");try{await fn()}finally{document.body.classList.remove("loading");render()}}
+
+/* ===== פעולות ===== */
+const A={
+ init:()=>busy(async()=>{S.job.customer=val("cust");S.job.address=val("addr");const t=val("t0");if(!t)return;S.initial=await aiParse(t,"שיחה ראשונית עם מזמין עבודה – הערכה ראשונית");log("בעל מקצוע","פתיחת עבודה: "+t)}),
+ diag:()=>busy(async()=>{const t=val("t1");if(!t)return;S.diagnosis=await aiParse(t,"אבחון בשטח לאחר ביקור");log("בעל מקצוע","אבחון בשטח: "+t)}),
+ quote(){S.quote={items:clone(S.diagnosis.items),total:total(S.diagnosis.items),at:now()};S.approval=null;log("מערכת",`הצעת מחיר הופקה לפי מחירון: ₪${S.quote.total}`);go(2)},
+ approve(ok){S.approval={ok,at:now()};log("מזמין",ok?`אישר הצעה (Baseline) ₪${S.quote.total}`:"דחה את ההצעה");render()},
+ parseAdd:()=>busy(async()=>{const t=val("t4");if(!t)return;S.pending=await aiParse(t,"תוספת שהתגלתה במהלך העבודה")}),
+ sendAdd(){const p=S.pending;S.additions.push({...p,total:total(p.items),status:"ממתין",asked:now()});log("בעל מקצוע",`ביקש אישור לתוספת: ${p.source} (₪${total(p.items)})`);S.pending=null;render()},
+ decideAdd(n,ok){const a=S.additions[n];a.status=ok?"אושר":"נדחה";a.at=now();log("מזמין",`${a.status} תוספת: ${a.source}`);render()},
+ parseDone:()=>busy(async()=>{const t=val("t5");if(!t)return;S.done=await aiParse(t,"תיאור מה בוצע בפועל בסיום העבודה")}),
+ close(){S.closed=true;log("בעל מקצוע","סיום עבודה: "+S.done.source);go(5)}
+};
+
+/* ===== חישוב "מה סיכמנו" ===== */
+function agreed(){
+ const m={};const add=(items)=>items.forEach(i=>m[i.id]=(m[i.id]||0)+i.qty);
+ if(S.approval?.ok) add(S.quote.items);
+ S.additions.filter(a=>a.status==="אושר").forEach(a=>add(a.items));return m;
+}
+function compareTable(){
+ const ag=agreed(),ac={};(S.done?.items||[]).forEach(i=>ac[i.id]=(ac[i.id]||0)+i.qty);
+ const ids=[...new Set([...Object.keys(ag),...Object.keys(ac)])];
+ if(!ids.length) return '<p class="mute">אין נתונים להשוואה</p>';
+ return `<table><tr><th>עבודה</th><th>אושר</th><th>בוצע</th><th>סטטוס</th></tr>`+ids.map(id=>{const a=ag[id]||0,b=ac[id]||0;
+  const st=a===b?'<span class="ok-t">תואם</span>':b>a?'<span class="bad-t">בוצע ללא אישור</span>':'<span class="warn-t">אושר ולא בוצע</span>';
+  return `<tr><td>${PRICES[id].name}</td><td>${a}</td><td>${b}</td><td>${st}</td></tr>`}).join("")+"</table>";
+}
+function summary(forCustomer){
+ const approved=Object.entries(agreed()).reduce((s,[id,q])=>s+PRICES[id].price*q,0);
+ const actual=S.done?total(S.done.items):0,diff=actual-approved,est=S.initial?total(S.initial.items):0;
+ const row=(l,v,c="")=>`<tr><td>${l}</td><td class="total ${c}">${v}</td></tr>`;
+ return `<div class="card"><h2>מה סיכמנו? ${S.job.customer?"– "+esc(S.job.customer):""}</h2>${S.job.address?`<p class="mute">${esc(S.job.address)}</p>`:""}
+ <table>${row("הערכה ראשונית",S.initial?"₪"+est:"—")}${row("הצעה מקורית",S.quote?"₪"+S.quote.total:"—")}
+ ${row("סטטוס הצעה",S.approval?(S.approval.ok?"אושרה":"נדחתה"):"ממתינה",S.approval?.ok?"ok-t":"warn-t")}
+ ${row("תוספות שאושרו",S.additions.filter(a=>a.status==="אושר").length+" / "+S.additions.length)}
+ ${row("סה\"כ סכום שאושר","₪"+approved)}${row("שווי ביצוע בפועל",S.done?"₪"+actual:"—")}
+ ${S.done?row("הפרש (ביצוע מול אישור)",(diff>0?"+":"")+"₪"+diff,diff===0?"ok-t":"bad-t"):""}</table>
+ <h3>השוואה: מה אושר מול מה בוצע</h3>${compareTable()}</div>
+ <div class="card"><h2>מסלול העבודה</h2><div class="grid">
+ <div><h3>1. הערכה ראשונית</h3><p>${S.initial?esc(S.initial.problem)+"<br><span class=mute>"+esc(S.initial.source)+"</span>":"—"}</p></div>
+ <div><h3>2. מה נמצא באבחון</h3><p>${S.diagnosis?esc(S.diagnosis.problem)+"<br><span class=mute>חלקים: "+esc(S.diagnosis.parts.join(", ")||"—")+"</span>":"—"}</p></div>
+ <div><h3>3. מה הוצע</h3>${S.quote?itemsTable(S.quote.items):"—"}</div>
+ <div><h3>4. מה בוצע בפועל</h3>${S.done?itemsTable(S.done.items):"—"}</div></div>
+ <h3>5. תוספות</h3>${S.additions.length?S.additions.map(a=>`<p>${esc(a.source)} – ₪${a.total} · <b>${a.status}</b>${a.at?" ("+a.at+")":""}</p>`).join(""):'<p class="mute">אין</p>'}</div>
+ ${forCustomer?"":`<div class="card"><h2>יומן אירועים</h2><div class="tl">${S.log.map(l=>`<div><span class="mute">${l.at}</span> · <b>${l.who}</b>: ${esc(l.what)}</div>`).join("")||'<span class="mute">ריק</span>'}</div></div>`}`;
+}
+
+/* ===== מסכים ===== */
+function proView(i){
+ switch(i){
+ case 0:return `<div class="card"><h2>שיחה ראשונית / פתיחת עבודה</h2><div class="grid"><div><label>מזמין העבודה</label><input type=text id="cust" value="${esc(S.job.customer)}" placeholder="שם"></div><div><label>כתובת</label><input type=text id="addr" value="${esc(S.job.address)}" placeholder="כתובת"></div></div>
+  <label>תיאור הבעיה כפי שנמסר בשיחה</label><textarea id="t0" placeholder='לדוגמה: "יש נזילה מתחת לכיור, כנראה מהסיפון"'>${esc(S.initial?.source)}</textarea><button class="btn" onclick="A.init()">נתח עם AI</button></div>`
+  +(S.initial?structEditor("initial")+`<div class="card"><b>הערכה ראשונית: ₪${total(S.initial.items)}</b> <span class="mute">(לפי המחירון, טרם ביקור)</span><br><button class="btn" onclick="go(1)">המשך לאבחון ←</button></div>`:"");
+ case 1:return `<div class="card"><h2>אבחון בשטח</h2>${S.initial?`<p class="mute">הערכה ראשונית: ${esc(S.initial.problem)}</p>`:""}<label>מה נמצא בביקור?</label><textarea id="t1" placeholder='לדוגמה: "הסיפון סדוק וצריך להחליף אותו"'>${esc(S.diagnosis?.source)}</textarea><button class="btn" onclick="A.diag()">נתח עם AI</button></div>`
+  +(S.diagnosis?structEditor("diagnosis")+`<div class="card"><button class="btn" onclick="A.quote()" ${S.diagnosis.items.length?"":"disabled"}>אשר מידע והפק הצעת מחיר ←</button></div>`:"");
+ case 2:if(!S.quote)return `<div class="card">טרם הופקה הצעת מחיר – השלימו את האבחון.</div>`;
+  return `<div class="card"><h2>הצעת מחיר</h2><p class="mute">הופקה ${S.quote.at} · המחיר מחושב בלוגיקה דטרמיניסטית מהמחירון, לא ע"י ה-AI.</p>${itemsTable(S.quote.items)}
+  <p>סטטוס: ${S.approval?(S.approval.ok?`<span class="ok-t">אושרה ע"י המזמין (${S.approval.at}) – Baseline</span>`:`<span class="bad-t">נדחתה (${S.approval.at})</span>`):'<span class="warn-t">ממתינה לאישור המזמין</span>'}</p>
+  ${S.approval?"":`<button class="btn" onclick="setRole('cust')">עבור למסך המזמין לאישור ←</button>`}</div>`;
+ case 3:return `<div class="card"><h2>תוספת במהלך העבודה</h2>${S.approval?.ok?"":'<p class="bad-t">אין עדיין הצעה מאושרת (Baseline).</p>'}<label>מה התגלה?</label><textarea id="t4" placeholder='לדוגמה: "צריך להחליף גם ברז ניל"'></textarea><button class="btn" onclick="A.parseAdd()">נתח עם AI</button></div>`
+  +(S.pending?structEditor("pending")+`<div class="card"><button class="btn" onclick="A.sendAdd()" ${S.pending.items.length?"":"disabled"}>שלח בקשת אישור נפרדת למזמין (₪${total(S.pending.items)})</button></div>`:"")
+  +(S.additions.length?`<div class="card"><h2>בקשות תוספת</h2>`+S.additions.map(a=>`<p>${esc(a.source)} – ₪${a.total} · <b class="${a.status==="אושר"?"ok-t":a.status==="נדחה"?"bad-t":"warn-t"}">${a.status}</b></p>`).join("")+`</div>`:"");
+ case 4:return `<div class="card"><h2>סיום העבודה</h2><label>מה בוצע בפועל?</label><textarea id="t5" placeholder='לדוגמה: "הוחלף הסיפון והוחלף ברז ניל"'>${esc(S.done?.source)}</textarea><button class="btn" onclick="A.parseDone()">נתח עם AI</button></div>`
+  +(S.done?structEditor("done")+`<div class="card">${compareTable()}<button class="btn" onclick="A.close()">סגור עבודה והצג "מה סיכמנו?" ←</button></div>`:"");
+ case 5:return summary(false)+`<button class="btn ghost" onclick="reset()">עבודה חדשה</button>`;
+ case 6:return `<div class="card"><h2>הגדרות AI</h2><p class="mute">ללא מפתח, המערכת משתמשת בניתוח מקומי מבוסס מילות מפתח (דמו). עם מפתח Anthropic – הניתוח מתבצע ע"י Claude. המפתח נשמר רק בדפדפן זה.</p>
+  <label>Anthropic API Key</label><input type=password id="key" value="${esc(S.apiKey)}" placeholder="sk-ant-..."><button class="btn" onclick="S.apiKey=val('key');render()">שמור</button></div>
+  <div class="card"><h2>מחירון</h2><table>${Object.values(PRICES).map(p=>`<tr><td>${p.name}</td><td>₪${p.price}</td></tr>`).join("")}</table></div>
+  <button class="btn ghost" onclick="reset()">איפוס – עבודה חדשה</button>`;
+ }
+}
+function custView(){
+ let h=`<div class="cust"><div class="card"><h2>שלום${S.job.customer?" "+esc(S.job.customer):""}</h2><p class="mute">כאן תוכלו לאשר את העבודה ולראות מה סוכם.</p></div>`;
+ if(!S.quote) return h+`<div class="card">אין עדיין הצעת מחיר לאישור.</div></div>`;
+ h+=`<div class="card"><h2>הצעת מחיר</h2>${S.diagnosis?`<p><b>מה נמצא:</b> ${esc(S.diagnosis.problem)}</p>`:""}${itemsTable(S.quote.items)}<p class="big">₪${S.quote.total}</p>`
+  +(S.approval?`<p class="${S.approval.ok?"ok-t":"bad-t"}">${S.approval.ok?"אישרתם":"דחיתם"} ב-${S.approval.at}</p>`:`<button class="btn ok" onclick="A.approve(true)">מאשר/ת</button> <button class="btn bad" onclick="A.approve(false)">דוחה</button>`)+`</div>`;
+ S.additions.forEach((a,n)=>{h+=`<div class="card"><h2>בקשת אישור לתוספת</h2><p>${esc(a.problem||a.source)}</p>${itemsTable(a.items)}<p class="big">₪${a.total}</p>`
+  +(a.status==="ממתין"?`<button class="btn ok" onclick="A.decideAdd(${n},true)">מאשר/ת תוספת</button> <button class="btn bad" onclick="A.decideAdd(${n},false)">דוחה</button>`:`<p class="${a.status==="אושר"?"ok-t":"bad-t"}">${a.status} ב-${a.at}</p>`)+`</div>`});
+ return h+summary(true)+"</div>";
+}
+function render(){
+ save();
+ document.getElementById("r-pro").className=S.role==="pro"?"on":"";document.getElementById("r-cust").className=S.role==="cust"?"on":"";
+ const nav=document.getElementById("nav");nav.style.display=S.role==="pro"?"flex":"none";
+ nav.innerHTML=STEPS.map(([s,d],i)=>`<button class="${i===S.step?"on":""} ${d()?"done":""}" onclick="go(${i})">${i<6?(i+1)+". ":"⚙ "}${s}</button>`).join("");
+ document.getElementById("app").innerHTML=S.role==="pro"?proView(S.step):custView();
+}
+render();
+</script>
+</body>
+</html>
