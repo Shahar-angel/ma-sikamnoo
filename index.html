@@ -11,6 +11,7 @@ header{background:var(--pri);color:#fff;padding:14px 16px;display:flex;flex-wrap
 header h1{margin:0;font-size:22px}header p{margin:2px 0 0;opacity:.85;font-size:13px}
 .roles button{border:1px solid #fff;background:transparent;color:#fff;padding:6px 12px;border-radius:16px;cursor:pointer;font:inherit}
 .roles button.on{background:#fff;color:var(--pri)}
+.roles .reset-btn{border-color:#ffcdd2;color:#ffebee}.roles .reset-btn.armed{background:var(--bad);color:#fff;border-color:var(--bad)}
 nav{display:flex;flex-wrap:wrap;gap:6px;padding:10px 16px;background:#fff;border-bottom:1px solid var(--line)}
 nav button{border:1px solid var(--line);background:#fff;padding:6px 10px;border-radius:16px;cursor:pointer;font-size:13px}
 nav button.on{background:var(--pri);color:#fff;border-color:var(--pri)}nav button.done::after{content:" ✓";color:var(--ok)}
@@ -38,7 +39,7 @@ input[type=number]{width:60px;padding:4px}
 <body>
 <header>
  <div><h1>מה סיכמנו?</h1><p>POC – אינסטלטור · שפה טבעית ← מידע מובנה ← פעולה במערכת</p></div>
- <div class="roles"><button id="r-pro" onclick="setRole('pro')">בעל מקצוע</button> <button id="r-cust" onclick="setRole('cust')">מזמין העבודה</button></div>
+ <div class="roles"><button id="r-pro" onclick="setRole('pro')">בעל מקצוע</button> <button id="r-cust" onclick="setRole('cust')">מזמין העבודה</button> <button id="reset-btn" class="reset-btn" onclick="reset()">איפוס</button></div>
 </header>
 <nav id="nav"></nav>
 <main id="app"></main>
@@ -99,7 +100,9 @@ const EMPTY={role:"pro",step:0,apiKey:"",job:{customer:"",address:""},initial:nu
 let S;try{S=Object.assign(clone(EMPTY),JSON.parse(localStorage.getItem("mahSikamnu")||"{}"))}catch{S=clone(EMPTY)}
 function save(){try{localStorage.setItem("mahSikamnu",JSON.stringify(S))}catch{}}
 function log(who,what){S.log.push({at:now(),who,what})}
-function reset(){if(confirm("לפתוח עבודה חדשה? כל הנתונים יימחקו.")){const k=S.apiKey;S=clone(EMPTY);S.apiKey=k;save();render()}}
+let resetArmed=false,resetTimer=null;
+function disarm(){resetArmed=false;document.querySelectorAll('[onclick="reset()"]').forEach(b=>{if(b.dataset.label)b.textContent=b.dataset.label;b.classList.remove('armed')})}
+function reset(){if(!resetArmed){resetArmed=true;document.querySelectorAll('[onclick="reset()"]').forEach(b=>{if(!b.dataset.label)b.dataset.label=b.textContent;b.textContent="בטוח? לחצו שוב";b.classList.add('armed')});resetTimer=setTimeout(disarm,3000);return}clearTimeout(resetTimer);resetArmed=false;const k=S.apiKey;S=clone(EMPTY);S.apiKey=k;save();render();disarm()}
 
 const STEPS=[["פתיחת עבודה",()=>S.initial],["אבחון בשטח",()=>S.quote],["הצעת מחיר",()=>S.approval],["תוספות",()=>S.additions.length],["סיום עבודה",()=>S.closed],["מה סיכמנו?",()=>S.closed],["הגדרות",()=>S.apiKey]];
 function setRole(r){S.role=r;render()}
@@ -208,7 +211,7 @@ function custView(){
   +(a.status==="ממתין"?`<button class="btn ok" onclick="A.decideAdd(${n},true)">מאשר/ת תוספת</button> <button class="btn bad" onclick="A.decideAdd(${n},false)">דוחה</button>`:`<p class="${a.status==="אושר"?"ok-t":"bad-t"}">${a.status} ב-${a.at}</p>`)+`</div>`});
  return h+summary(true)+"</div>";
 }
-function render(){
+function render(){if(resetArmed){clearTimeout(resetTimer);disarm()}
  save();
  document.getElementById("r-pro").className=S.role==="pro"?"on":"";document.getElementById("r-cust").className=S.role==="cust"?"on":"";
  const nav=document.getElementById("nav");nav.style.display=S.role==="pro"?"flex":"none";
